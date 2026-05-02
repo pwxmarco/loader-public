@@ -3,7 +3,7 @@
 // ============================================
 
 (function() {
-  const SERVER_URL = 'https://your-render-url.onrender.com'; // ← अपना URL डालो
+  const SERVER_URL = 'https://js-injection-server.onrender.com'; // ← अपना URL डालो
   let accessToken = null;
   let verificationInterval = null;
 
