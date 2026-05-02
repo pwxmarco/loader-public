@@ -5,7 +5,7 @@
 
 (function() {
   // ==================== CONFIG ====================
-  const SERVER_URL = 'https://your-server.onrender.com'; // ← CHANGE करो Render URL
+  const SERVER_URL = 'https://js-injection-server.onrender.com'; // ← CHANGE करो Render URL
   let accessToken = null;
   let verificationInterval = null;
 
