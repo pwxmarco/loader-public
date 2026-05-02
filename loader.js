@@ -1,575 +1,452 @@
 // ============================================
-// LOADER.JS - UPDATED v2.0
+// LOADER.JS - v3.0 FINAL FIX
+// ============================================
+// KEY FIXES:
+// 1. localStorage use - tab/page change pe token nahi jaata
+// 2. beforeunload pe clearToken NAHI - redirect pe token safe rehta hai
+// 3. Loading screen INSTANTLY inject hoti hai script ke load hote hi
+// 4. Allowed sites check - sirf specific pages pe kaam karta hai
+// 5. VPN detect hone pe generate button kaam nahi karta
 // ============================================
 
-console.log('🚀 PW Marco Loader v2.0 Started');
-
 (function () {
-  const API = 'https://js-injection-server.onrender.com'; // ← apna URL
 
-  // ✅ Allowed sites jahan token valid rahega
+  const API = 'https://js-injection-server.onrender.com'; // ← apna server URL yahan
+
+  // ✅ Allowed hostnames
   const ALLOWED_HOSTS = [
-    'pwthor.live',
+    'homepage-pw-marco.netlify.app',
     'test.pwthor.live',
-    'homepage-pw-marco.netlify.app'
+    'pwthor.live'
   ];
 
-  // ✅ Allowed paths (pwthor.live ke andar sirf ye pages)
-  const ALLOWED_PATHS_PWTHOR = [
-    '/auth',
-    '/study',
-    '/study/batches',
-  ];
+  // ✅ pwthor.live ke andar sirf ye paths allowed hain
+  const ALLOWED_PWTHOR_PATHS = ['/auth', '/study', '/study/batches'];
 
-  let token = null;
-  let verifyInterval = null;
+  let _token = null;
+  let _verifyTimer = null;
 
-  // ==================== LOADING SCREEN ====================
-  function showLoadingScreen() {
-    if (document.getElementById('pw-loading-screen')) return;
-
-    const loader = document.createElement('div');
-    loader.id = 'pw-loading-screen';
-    loader.style.cssText = `
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-      z-index: 9999999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Segoe UI', Arial, sans-serif;
-      transition: opacity 0.5s ease;
-    `;
-    loader.innerHTML = `
-      <style>
-        @keyframes pw-spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        @keyframes pw-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        .pw-spinner {
-          width: 60px; height: 60px;
-          border: 4px solid rgba(255,255,255,0.1);
-          border-top: 4px solid #667eea;
-          border-radius: 50%;
-          animation: pw-spin 1s linear infinite;
-          margin-bottom: 24px;
-        }
-        .pw-loading-text {
-          color: rgba(255,255,255,0.9);
-          font-size: 16px;
-          letter-spacing: 2px;
-          text-transform: uppercase;
-          animation: pw-pulse 1.5s ease infinite;
-        }
-        .pw-brand {
-          color: white;
-          font-size: 28px;
-          font-weight: 800;
-          margin-bottom: 8px;
-          background: linear-gradient(135deg, #667eea, #764ba2);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .pw-tagline {
-          color: rgba(255,255,255,0.4);
-          font-size: 12px;
-          margin-bottom: 40px;
-          letter-spacing: 1px;
-        }
-      </style>
-      <div class="pw-brand">PW Marco</div>
-      <div class="pw-tagline">SECURE ACCESS PORTAL</div>
-      <div class="pw-spinner"></div>
-      <div class="pw-loading-text">Verifying Access...</div>
-    `;
-    document.documentElement.appendChild(loader);
-  }
-
-  function hideLoadingScreen() {
-    const loader = document.getElementById('pw-loading-screen');
-    if (loader) {
-      loader.style.opacity = '0';
-      setTimeout(() => loader.remove(), 500);
-    }
-  }
-
-  // ==================== ALLOWED SITE CHECK ====================
+  // ─────────────────────────────────────────
+  // 0. SITE CHECK — sabse pehle
+  // ─────────────────────────────────────────
   function isAllowedSite() {
-    const host = window.location.hostname;
-    const path = window.location.pathname;
+    const host = location.hostname;
+    const path = location.pathname.replace(/\/$/, '') || '/';
 
     if (host === 'homepage-pw-marco.netlify.app') return true;
     if (host === 'test.pwthor.live') return true;
-
     if (host === 'pwthor.live') {
-      return ALLOWED_PATHS_PWTHOR.some(p => path === p || path.startsWith(p + '/'));
+      return ALLOWED_PWTHOR_PATHS.some(p =>
+        path === p || path.startsWith(p + '/')
+      );
     }
-
     return false;
   }
 
-  // ==================== STORAGE (localStorage = across tabs/pages) ====================
-  function getToken() {
-    try {
-      return localStorage.getItem('pw_marco_token');
-    } catch (e) { return null; }
+  // Agar allowed site nahi hai — bilkul kuch mat karo
+  if (!isAllowedSite()) return;
+
+  // ─────────────────────────────────────────
+  // 1. LOADING SCREEN — INSTANT (DOM ready hone se pehle bhi)
+  //    Script inject hote hi yeh run ho jaata hai
+  // ─────────────────────────────────────────
+  var _loaderStyle = document.createElement('style');
+  _loaderStyle.textContent = [
+    '@keyframes _pw_spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}',
+    '@keyframes _pw_pulse{0%,100%{opacity:1}50%{opacity:0.4}}',
+    '#_pw_ls{position:fixed;top:0;left:0;width:100%;height:100%;',
+    'background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);',
+    'z-index:2147483647;display:flex;flex-direction:column;',
+    'align-items:center;justify-content:center;',
+    'font-family:"Segoe UI",Arial,sans-serif;',
+    'transition:opacity 0.5s ease;}',
+    '#_pw_ls ._sp{width:56px;height:56px;border:4px solid rgba(255,255,255,0.1);',
+    'border-top:4px solid #667eea;border-radius:50%;',
+    'animation:_pw_spin 1s linear infinite;margin-bottom:22px;}',
+    '#_pw_ls ._br{font-size:26px;font-weight:800;',
+    'background:linear-gradient(135deg,#667eea,#a78bfa);',
+    '-webkit-background-clip:text;-webkit-text-fill-color:transparent;',
+    'margin-bottom:6px;}',
+    '#_pw_ls ._tg{color:rgba(255,255,255,0.35);font-size:11px;',
+    'letter-spacing:2px;margin-bottom:36px;text-transform:uppercase;}',
+    '#_pw_ls ._lt{color:rgba(255,255,255,0.7);font-size:14px;',
+    'letter-spacing:1.5px;text-transform:uppercase;',
+    'animation:_pw_pulse 1.4s ease infinite;}'
+  ].join('');
+
+  // Style inject — document.head ready ho ya na ho
+  (document.head || document.documentElement).appendChild(_loaderStyle);
+
+  // Loading div
+  var _ls = document.createElement('div');
+  _ls.id = '_pw_ls';
+  _ls.innerHTML = '<div class="_br">PW Marco</div><div class="_tg">Secure Access</div><div class="_sp"></div><div class="_lt">Verifying...</div>';
+
+  // documentElement mein daal do — body ka wait nahi
+  document.documentElement.appendChild(_ls);
+
+  function _hideLoader() {
+    var el = document.getElementById('_pw_ls');
+    if (!el) return;
+    el.style.opacity = '0';
+    setTimeout(function () { el && el.remove(); }, 500);
   }
 
-  function setToken(t) {
+  // ─────────────────────────────────────────
+  // 2. TOKEN STORAGE — localStorage (persistent)
+  // ─────────────────────────────────────────
+  function _getToken() {
+    try { return localStorage.getItem('_pw_marco_tk'); } catch (e) { return null; }
+  }
+  function _saveToken(t) {
     try {
-      localStorage.setItem('pw_marco_token', t);
-      localStorage.setItem('pw_marco_token_time', Date.now().toString());
+      localStorage.setItem('_pw_marco_tk', t);
     } catch (e) { }
   }
-
-  function clearToken() {
-    try {
-      localStorage.removeItem('pw_marco_token');
-      localStorage.removeItem('pw_marco_token_time');
-    } catch (e) { }
+  function _deleteToken() {
+    try { localStorage.removeItem('_pw_marco_tk'); } catch (e) { }
   }
 
-  // ==================== POPUP BASE STYLES ====================
-  function injectPopupStyles() {
-    if (document.getElementById('pw-popup-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'pw-popup-styles';
-    style.textContent = `
-      @keyframes pw-fadeIn {
-        from { opacity: 0; transform: translate(-50%, -48%) scale(0.95); }
-        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-      }
-      @keyframes pw-overlayIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      @keyframes pw-shake {
-        0%, 100% { transform: translate(-50%, -50%) scale(1); }
-        25% { transform: translate(-52%, -50%) scale(1); }
-        75% { transform: translate(-48%, -50%) scale(1); }
-      }
-      .pw-popup-overlay {
-        position: fixed; top: 0; left: 0;
-        width: 100%; height: 100%;
-        background: rgba(0,0,0,0.85);
-        backdrop-filter: blur(8px);
-        z-index: 9999998;
-        animation: pw-overlayIn 0.3s ease;
-      }
-      .pw-popup-box {
-        position: fixed;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -50%);
-        background: linear-gradient(145deg, #1a1a2e, #16213e);
-        border: 1px solid rgba(102, 126, 234, 0.3);
-        border-radius: 20px;
-        padding: 40px 35px;
-        z-index: 9999999;
-        text-align: center;
-        font-family: 'Segoe UI', Arial, sans-serif;
-        max-width: 440px;
-        width: 92%;
-        box-shadow: 0 25px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
-        animation: pw-fadeIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-        color: white;
-      }
-      .pw-popup-icon {
-        font-size: 54px;
-        margin-bottom: 12px;
-        display: block;
-      }
-      .pw-popup-title {
-        font-size: 22px;
-        font-weight: 700;
-        margin: 0 0 10px;
-        background: linear-gradient(135deg, #667eea, #a78bfa);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-      .pw-popup-desc {
-        color: rgba(255,255,255,0.6);
-        font-size: 13px;
-        line-height: 1.6;
-        margin: 0 0 24px;
-      }
-      .pw-btn-primary {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 14px 0;
-        border-radius: 12px;
-        font-size: 15px;
-        font-weight: 700;
-        cursor: pointer;
-        width: 100%;
-        margin-bottom: 10px;
-        transition: all 0.3s;
-        letter-spacing: 0.5px;
-        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
-      }
-      .pw-btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 25px rgba(102, 126, 234, 0.6);
-      }
-      .pw-btn-primary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none;
-      }
-      .pw-btn-secondary {
-        background: rgba(255,255,255,0.05);
-        color: rgba(255,255,255,0.6);
-        border: 1px solid rgba(255,255,255,0.1);
-        padding: 12px 0;
-        border-radius: 12px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        width: 100%;
-        transition: all 0.3s;
-      }
-      .pw-btn-secondary:hover {
-        background: rgba(255,255,255,0.1);
-        color: white;
-      }
-      .pw-status-text {
-        color: #f87171;
-        margin-top: 12px;
-        font-size: 13px;
-        min-height: 18px;
-      }
-      .pw-divider {
-        border: none;
-        border-top: 1px solid rgba(255,255,255,0.08);
-        margin: 20px 0 16px;
-      }
-      .pw-footer-note {
-        color: rgba(255,255,255,0.3);
-        font-size: 11px;
-        line-height: 1.5;
-      }
-      .pw-reason-badge {
-        display: inline-block;
-        background: rgba(248, 113, 113, 0.15);
-        border: 1px solid rgba(248, 113, 113, 0.3);
-        color: #f87171;
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        margin-bottom: 20px;
-        letter-spacing: 0.5px;
-      }
-    `;
-    document.head.appendChild(style);
+  // ─────────────────────────────────────────
+  // 3. POPUP STYLES
+  // ─────────────────────────────────────────
+  function _injectPopupCSS() {
+    if (document.getElementById('_pw_pstyle')) return;
+    var s = document.createElement('style');
+    s.id = '_pw_pstyle';
+    s.textContent = [
+      '@keyframes _pw_fi{from{opacity:0;transform:translate(-50%,-48%) scale(0.93)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}',
+      '@keyframes _pw_oi{from{opacity:0}to{opacity:1}}',
+      '._pw_ov{position:fixed;top:0;left:0;width:100%;height:100%;',
+      'background:rgba(0,0,0,0.88);backdrop-filter:blur(10px);',
+      'z-index:2147483646;animation:_pw_oi 0.3s ease;}',
+      '._pw_box{position:fixed;top:50%;left:50%;',
+      'transform:translate(-50%,-50%);',
+      'background:linear-gradient(145deg,#1a1a2e,#16213e);',
+      'border:1px solid rgba(102,126,234,0.25);border-radius:22px;',
+      'padding:38px 32px;z-index:2147483647;text-align:center;',
+      'font-family:"Segoe UI",Arial,sans-serif;',
+      'max-width:420px;width:92%;',
+      'box-shadow:0 30px 80px rgba(0,0,0,0.7);',
+      'animation:_pw_fi 0.35s cubic-bezier(0.34,1.56,0.64,1);color:#e2e8f0;}',
+      '._pw_icon{font-size:52px;display:block;margin-bottom:14px;}',
+      '._pw_title{font-size:22px;font-weight:800;margin:0 0 10px;',
+      'background:linear-gradient(135deg,#667eea,#a78bfa);',
+      '-webkit-background-clip:text;-webkit-text-fill-color:transparent;}',
+      '._pw_desc{color:rgba(255,255,255,0.55);font-size:13px;',
+      'line-height:1.65;margin:0 0 22px;}',
+      '._pw_badge{display:inline-block;',
+      'background:rgba(248,113,113,0.12);',
+      'border:1px solid rgba(248,113,113,0.3);',
+      'color:#f87171;padding:5px 14px;border-radius:20px;',
+      'font-size:11px;font-weight:700;margin-bottom:18px;letter-spacing:0.5px;}',
+      '._pw_btn_p{background:linear-gradient(135deg,#667eea,#764ba2);',
+      'color:#fff;border:none;padding:14px 0;border-radius:12px;',
+      'font-size:15px;font-weight:700;cursor:pointer;width:100%;',
+      'margin-bottom:10px;transition:all 0.3s;letter-spacing:0.5px;',
+      'box-shadow:0 4px 20px rgba(102,126,234,0.35);}',
+      '._pw_btn_p:hover{transform:translateY(-2px);',
+      'box-shadow:0 8px 25px rgba(102,126,234,0.55);}',
+      '._pw_btn_p:disabled{opacity:0.5;cursor:not-allowed;transform:none;}',
+      '._pw_hr{border:none;border-top:1px solid rgba(255,255,255,0.07);',
+      'margin:18px 0 14px;}',
+      '._pw_note{color:rgba(255,255,255,0.28);font-size:11px;line-height:1.5;}',
+      '._pw_err{color:#f87171;font-size:12px;margin-top:10px;min-height:16px;}',
+    ].join('');
+    (document.head || document.documentElement).appendChild(s);
   }
 
-  // ==================== KEY GENERATION POPUP ====================
-  function showKeyGenPopup() {
-    if (document.getElementById('pw-marco-popup')) return;
-
-    injectPopupStyles();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'pw-popup-overlay';
-    overlay.id = 'pw-overlay';
-
-    const popup = document.createElement('div');
-    popup.id = 'pw-marco-popup';
-    popup.className = 'pw-popup-box';
-    popup.innerHTML = `
-      <span class="pw-popup-icon">🔐</span>
-      <h2 class="pw-popup-title">Access Required</h2>
-      <p class="pw-popup-desc">
-        Generate your secure access key to unlock the app.<br>
-        Key will be valid across all authorized pages.
-      </p>
-      <button id="pw-gen-btn" class="pw-btn-primary">⚡ Generate Access Key</button>
-      <p id="pw-status" class="pw-status-text"></p>
-      <hr class="pw-divider">
-      <p class="pw-footer-note">🛡️ Your device will be registered &amp; verified in real-time.<br>VPN usage is not permitted.</p>
-    `;
-
-    document.body.appendChild(overlay);
-    document.body.appendChild(popup);
-    document.getElementById('pw-gen-btn').onclick = generateKey;
-  }
-
-  // ==================== ALERT POPUP (Revoke / Ban / VPN) ====================
-  function showAlertPopup({ icon, title, reason, reasonLabel, showNewKeyBtn }) {
-    // Remove existing
-    removeAllPopups();
-    injectPopupStyles();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'pw-popup-overlay';
-    overlay.id = 'pw-overlay';
-
-    const popup = document.createElement('div');
-    popup.id = 'pw-marco-popup';
-    popup.className = 'pw-popup-box';
-
-    popup.innerHTML = `
-      <span class="pw-popup-icon">${icon}</span>
-      <h2 class="pw-popup-title">${title}</h2>
-      ${reasonLabel ? `<div class="pw-reason-badge">📋 ${reasonLabel}</div>` : ''}
-      <p class="pw-popup-desc">${reason}</p>
-      ${showNewKeyBtn ? `<button id="pw-newkey-btn" class="pw-btn-primary">🔄 Generate New Key</button>` : ''}
-      <hr class="pw-divider">
-      <p class="pw-footer-note">Contact admin if you think this is a mistake.</p>
-    `;
-
-    document.body.appendChild(overlay);
-    document.body.appendChild(popup);
-
-    if (showNewKeyBtn) {
-      document.getElementById('pw-newkey-btn').onclick = () => {
-        removeAllPopups();
-        clearToken();
-        token = null;
-        // Redirect to homepage first, then key popup will show there
-        window.location.href = 'https://homepage-pw-marco.netlify.app';
-      };
-    }
-  }
-
-  // ==================== VPN POPUP ====================
-  function showVPNPopup() {
-    showAlertPopup({
-      icon: '🚫',
-      title: 'VPN Detected',
-      reasonLabel: 'VPN / Proxy Blocked',
-      reason: 'VPN ya Proxy use karna allowed nahi hai.<br>Please VPN band karo aur dobara try karo.',
-      showNewKeyBtn: false
-    });
-  }
-
-  // ==================== REMOVE ALL POPUPS ====================
-  function removeAllPopups() {
-    ['pw-marco-popup', 'pw-overlay', 'pw-loading-screen'].forEach(id => {
-      const el = document.getElementById(id);
+  function _removePopups() {
+    ['_pw_ov', '_pw_box'].forEach(function (id) {
+      var el = document.getElementById(id);
       if (el) el.remove();
     });
   }
 
-  // ==================== GENERATE KEY ====================
-  async function generateKey() {
-    const btn = document.getElementById('pw-gen-btn');
-    const status = document.getElementById('pw-status');
+  // ─────────────────────────────────────────
+  // 4. KEY GENERATION POPUP
+  // ─────────────────────────────────────────
+  function _showKeyPopup() {
+    _removePopups();
+    _injectPopupCSS();
 
+    var ov = document.createElement('div');
+    ov.className = '_pw_ov'; ov.id = '_pw_ov';
+
+    var box = document.createElement('div');
+    box.className = '_pw_box'; box.id = '_pw_box';
+    box.innerHTML = [
+      '<span class="_pw_icon">🔐</span>',
+      '<h2 class="_pw_title">Access Required</h2>',
+      '<p class="_pw_desc">Secure access key generate karo.<br>Key ek baar banao — sari allowed sites pe valid rahegi.</p>',
+      '<button id="_pw_gbtn" class="_pw_btn_p">⚡ Generate Access Key</button>',
+      '<p id="_pw_gerr" class="_pw_err"></p>',
+      '<hr class="_pw_hr">',
+      '<p class="_pw_note">🛡️ Device register hoga. VPN allowed nahi hai.</p>',
+    ].join('');
+
+    document.body.appendChild(ov);
+    document.body.appendChild(box);
+    document.getElementById('_pw_gbtn').onclick = _generateKey;
+  }
+
+  // ─────────────────────────────────────────
+  // 5. ALERT POPUP (Revoke / Ban / VPN / Expire)
+  // ─────────────────────────────────────────
+  function _showAlertPopup(icon, title, badge, desc, showNewKeyBtn) {
+    _removePopups();
+    _injectPopupCSS();
+
+    var ov = document.createElement('div');
+    ov.className = '_pw_ov'; ov.id = '_pw_ov';
+
+    var box = document.createElement('div');
+    box.className = '_pw_box'; box.id = '_pw_box';
+
+    var html = [
+      '<span class="_pw_icon">' + icon + '</span>',
+      '<h2 class="_pw_title">' + title + '</h2>',
+    ];
+    if (badge) html.push('<div class="_pw_badge">' + badge + '</div>');
+    html.push('<p class="_pw_desc">' + desc + '</p>');
+    if (showNewKeyBtn) {
+      html.push('<button id="_pw_nkbtn" class="_pw_btn_p">🔄 Generate New Key</button>');
+    }
+    html.push('<hr class="_pw_hr"><p class="_pw_note">Admin se contact karo agar galti lage.</p>');
+
+    box.innerHTML = html.join('');
+    document.body.appendChild(ov);
+    document.body.appendChild(box);
+
+    if (showNewKeyBtn) {
+      document.getElementById('_pw_nkbtn').onclick = function () {
+        _deleteToken();
+        _token = null;
+        // Pehle homepage pe jaao, wahan key popup dikhega
+        location.href = 'https://homepage-pw-marco.netlify.app';
+      };
+    }
+  }
+
+  // ─────────────────────────────────────────
+  // 6. GENERATE KEY
+  // ─────────────────────────────────────────
+  async function _generateKey() {
+    var btn = document.getElementById('_pw_gbtn');
+    var err = document.getElementById('_pw_gerr');
     btn.disabled = true;
     btn.textContent = '⏳ Verifying...';
-    if (status) status.textContent = '';
+    if (err) err.textContent = '';
 
     try {
-      const response = await fetch(`${API}/api/generate-key`, {
+      var res = await fetch(API + '/api/generate-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-
-      const data = await response.json();
+      var data = await res.json();
 
       if (data.reason === 'vpn_detected') {
-        showVPNPopup();
+        _showAlertPopup('🚫', 'VPN Detected', '⚠️ VPN / Proxy Blocked',
+          'VPN ya Proxy detect hua hai.<br>Disable karo aur dobara try karo.<br><br><strong>VPN use strictly prohibited hai.</strong>',
+          false);
         return;
       }
 
       if (data.reason === 'device_banned') {
-        showAlertPopup({
-          icon: '🚫',
-          title: 'Device Banned',
-          reasonLabel: 'Permanent Ban',
-          reason: 'Tumhara device permanently ban kar diya gaya hai.',
-          showNewKeyBtn: false
-        });
+        _showAlertPopup('🚫', 'Device Banned', '🔒 Permanent Ban',
+          'Tumhara device permanently ban hai.<br>Admin se contact karo.',
+          false);
         return;
       }
 
-      if (response.ok && data.token) {
-        token = data.token;
-        setToken(token);
-        removeAllPopups();
-        showLoadingScreen();
-        startVerification();
-        await injectMainJS();
-        setTimeout(hideLoadingScreen, 4000);
+      if (res.ok && data.token) {
+        _token = data.token;
+        _saveToken(_token);
+        _removePopups();
+        // Loading screen dikhao phir inject karo
+        _showLoaderAgain();
+        _startVerify();
+        await _injectMainJS();
+        setTimeout(_hideLoader, 4500);
       } else {
-        if (status) status.textContent = `❌ ${data.error || 'Error generating key'}`;
+        if (err) err.textContent = '❌ ' + (data.error || 'Error. Try again.');
         btn.disabled = false;
         btn.textContent = '⚡ Generate Access Key';
       }
 
-    } catch (error) {
-      if (status) status.textContent = '❌ Network error. Try again.';
+    } catch (e) {
+      if (err) err.textContent = '❌ Network error. Try again.';
       btn.disabled = false;
       btn.textContent = '⚡ Generate Access Key';
     }
   }
 
-  // ==================== INJECT MAIN.JS ====================
-  async function injectMainJS() {
-    try {
-      const response = await fetch(`${API}/api/get-main-js?token=${token}`);
-      if (response.ok) {
-        const code = await response.text();
-        const script = document.createElement('script');
-        script.id = 'pw-main-script';
-        script.textContent = code;
-        document.body.appendChild(script);
-        console.log('✅ main.js injected!');
-      } else {
-        console.error('❌ Failed to fetch main.js:', response.status);
-      }
-    } catch (error) {
-      console.error('❌ Injection error:', error);
+  // Loading screen ko popup ke baad phir se dikhao
+  function _showLoaderAgain() {
+    var el = document.getElementById('_pw_ls');
+    if (el) {
+      el.style.opacity = '1';
+    } else {
+      var ls2 = document.createElement('div');
+      ls2.id = '_pw_ls';
+      ls2.innerHTML = '<div class="_br">PW Marco</div><div class="_tg">Secure Access</div><div class="_sp"></div><div class="_lt">Loading App...</div>';
+      document.documentElement.appendChild(ls2);
     }
   }
 
-  // ==================== VERIFICATION ====================
-  function startVerification() {
-    if (verifyInterval) clearInterval(verifyInterval);
+  // ─────────────────────────────────────────
+  // 7. INJECT MAIN.JS
+  // ─────────────────────────────────────────
+  async function _injectMainJS() {
+    try {
+      var res = await fetch(API + '/api/get-main-js?token=' + _token);
+      if (res.ok) {
+        var code = await res.text();
+        var sc = document.createElement('script');
+        sc.id = '_pw_main';
+        sc.textContent = code;
+        document.body.appendChild(sc);
+        console.log('✅ main.js injected');
+      }
+    } catch (e) {
+      console.error('Inject error:', e);
+    }
+  }
 
-    verifyInterval = setInterval(async () => {
+  // ─────────────────────────────────────────
+  // 8. TOKEN VERIFICATION (har 3 sec)
+  // ─────────────────────────────────────────
+  function _startVerify() {
+    if (_verifyTimer) clearInterval(_verifyTimer);
+    _verifyTimer = setInterval(async function () {
       try {
-        const response = await fetch(`${API}/api/verify-token`, {
+        var res = await fetch(API + '/api/verify-token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
+          body: JSON.stringify({ token: _token })
         });
-
-        if (!response.ok) {
-          const data = await response.json();
-          handleTokenInvalid(data.reason, data.revokeReason || null);
+        if (!res.ok) {
+          var data = await res.json();
+          _onInvalidToken(data.reason, data.revokeReason);
         }
-      } catch (error) {
-        // Network error - don't revoke, just skip
-        console.warn('⚠️ Verification network error');
+      } catch (e) {
+        // Network error — skip, block mat karo
       }
     }, 3000);
   }
 
-  // ==================== HANDLE INVALID TOKEN ====================
-  function handleTokenInvalid(reason, revokeReason) {
-    clearToken();
-    token = null;
-    clearInterval(verifyInterval);
-    verifyInterval = null;
+  function _onInvalidToken(reason, revokeReason) {
+    clearInterval(_verifyTimer);
+    _verifyTimer = null;
+    _deleteToken();
+    _token = null;
 
-    // Remove any existing injected script
-    const sc = document.getElementById('pw-main-script');
+    // injected script remove karo
+    var sc = document.getElementById('_pw_main');
     if (sc) sc.remove();
 
-    const configs = {
-      device_banned: {
-        icon: '🚫',
-        title: 'Device Banned',
-        reasonLabel: 'Permanent Ban',
-        reason: 'Tumhara device admin ne permanently ban kar diya hai.<br>Kisi aur device se try karo.',
-        showNewKeyBtn: false
+    var map = {
+      'access_revoked': {
+        icon: '⛔', title: 'Access Revoked',
+        badge: '📋 ' + (revokeReason || 'Admin action'),
+        desc: 'Tumhara access revoke ho gaya.<br><strong>Reason:</strong> ' + (revokeReason || 'Admin ne revoke kiya') + '.',
+        newKey: true
       },
-      access_revoked: {
-        icon: '⛔',
-        title: 'Access Revoked',
-        reasonLabel: revokeReason || 'Admin ne Revoke kiya',
-        reason: `Tumhara access revoke ho gaya hai.<br><strong>Reason:</strong> ${revokeReason || 'Admin action'}.<br>Naya key generate karo ya admin se contact karo.`,
-        showNewKeyBtn: true
+      'device_banned': {
+        icon: '🚫', title: 'Device Banned',
+        badge: '🔒 Permanent Ban',
+        desc: 'Tumhara device permanently ban hai.',
+        newKey: false
       },
-      vpn_detected: {
-        icon: '🚫',
-        title: 'VPN Detected',
-        reasonLabel: 'VPN / Proxy Blocked',
-        reason: 'VPN detect hua. Please VPN band karo phir try karo.',
-        showNewKeyBtn: false
+      'vpn_detected': {
+        icon: '🚫', title: 'VPN Detected',
+        badge: '⚠️ VPN / Proxy',
+        desc: 'VPN detect hua. Disable karo.',
+        newKey: false
       },
-      token_expired: {
-        icon: '⏰',
-        title: 'Key Expired',
-        reasonLabel: 'Session Expire',
-        reason: 'Tumhari access key expire ho gayi hai. Naya key generate karo.',
-        showNewKeyBtn: true
+      'token_expired': {
+        icon: '⏰', title: 'Key Expired',
+        badge: '⏱ Session Over',
+        desc: 'Teri key expire ho gayi. Naya generate karo.',
+        newKey: true
       }
     };
 
-    const config = configs[reason] || {
-      icon: '⚠️',
-      title: 'Access Blocked',
-      reasonLabel: reason || 'Unknown',
-      reason: 'Access block ho gaya. Naya key generate karo.',
-      showNewKeyBtn: true
+    var cfg = map[reason] || {
+      icon: '⚠️', title: 'Access Blocked',
+      badge: reason || 'Unknown',
+      desc: 'Access block ho gaya. Naya key generate karo.',
+      newKey: true
     };
 
-    showAlertPopup(config);
+    _showAlertPopup(cfg.icon, cfg.title, cfg.badge, cfg.desc, cfg.newKey);
   }
 
-  // ==================== INIT ====================
-  function initLoader() {
-    // Agar allowed site nahi hai, kuch mat karo
-    if (!isAllowedSite()) {
-      console.log('🔕 Not an allowed site. Loader inactive.');
-      return;
-    }
+  // ─────────────────────────────────────────
+  // 9. INIT — token check
+  // ─────────────────────────────────────────
+  function _init() {
+    var saved = _getToken();
 
-    // Instant loading screen
-    showLoadingScreen();
-
-    const existingToken = getToken();
-
-    if (existingToken) {
-      token = existingToken;
-
-      // Verify token first before showing content
-      fetch(`${API}/api/verify-token`, {
+    if (saved) {
+      // Token mil gaya — verify karo pehle
+      _token = saved;
+      fetch(API + '/api/verify-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
-      }).then(async (res) => {
+        body: JSON.stringify({ token: saved })
+      }).then(function (res) {
         if (res.ok) {
-          startVerification();
-          await injectMainJS();
-          setTimeout(hideLoadingScreen, 4000);
+          // Valid hai — content load karo
+          _startVerify();
+          _injectMainJS().then(function () {
+            setTimeout(_hideLoader, 4500);
+          });
         } else {
-          const data = await res.json();
-          hideLoadingScreen();
-          handleTokenInvalid(data.reason, data.revokeReason);
+          return res.json().then(function (data) {
+            _hideLoader();
+            _deleteToken();
+            _token = null;
+            _onInvalidToken(data.reason, data.revokeReason);
+          });
         }
-      }).catch(() => {
-        // Network error on verify - show content anyway
-        startVerification();
-        injectMainJS().then(() => setTimeout(hideLoadingScreen, 4000));
+      }).catch(function () {
+        // Network issue — token ko safe maan ke chalao
+        _startVerify();
+        _injectMainJS().then(function () {
+          setTimeout(_hideLoader, 4500);
+        });
       });
 
     } else {
-      // No token - show key gen popup
-      hideLoadingScreen();
-      showKeyGenPopup();
+      // Koi token nahi — loading hide karo, popup dikhao
+      _hideLoader();
+      // Body ready hone ka wait karo popup ke liye
+      if (document.body) {
+        _showKeyPopup();
+      } else {
+        document.addEventListener('DOMContentLoaded', _showKeyPopup);
+      }
     }
   }
 
-  // Start immediately
-  if (document.readyState === 'loading') {
-    // Show loading screen before DOM ready
-    document.addEventListener('DOMContentLoaded', initLoader);
-  } else {
-    initLoader();
-  }
+  // Script inject hote hi init — DOMContentLoaded ka wait nahi
+  _init();
 
-  // Page visibility change
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && token) {
-      if (!verifyInterval) startVerification();
-    } else {
-      if (verifyInterval) {
-        clearInterval(verifyInterval);
-        verifyInterval = null;
+  // ─────────────────────────────────────────
+  // 10. VISIBILITY CHANGE
+  // ─────────────────────────────────────────
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && _token) {
+      if (!_verifyTimer) _startVerify();
+    } else if (document.hidden) {
+      if (_verifyTimer) {
+        clearInterval(_verifyTimer);
+        _verifyTimer = null;
       }
     }
   });
+
+  // ⚠️ beforeunload pe TOKEN CLEAR NAHI KARNA — redirect pe token safe rahe
 
 })();
