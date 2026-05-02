@@ -1,115 +1,139 @@
 // ============================================
-// LOADER.JS v2 - UPDATED
-// Host on: loader-public GitHub repo
+// LOADER.JS - UPDATED v2.0
 // ============================================
 
+console.log('🚀 PW Marco Loader v2.0 Started');
+
 (function () {
-  'use strict';
+  const API = 'https://js-injection-server.onrender.com'; // ← apna URL
 
-  // ==================== CONFIG ====================
-  const API = 'https://js-injection-server.onrender.com'; // ← Your server URL
-  const TOKEN_KEY = 'pw_marco_token_v2';
-
-  // Sites where the key remains valid — no re-prompt on these
-  const ALLOWED_HOSTNAMES = [
+  // ✅ Allowed sites jahan token valid rahega
+  const ALLOWED_HOSTS = [
     'pwthor.live',
     'test.pwthor.live',
     'homepage-pw-marco.netlify.app'
   ];
 
-  // Paths on pwthor.live where key is valid
-  const ALLOWED_PATHS_ON_PWTHOR = [
+  // ✅ Allowed paths (pwthor.live ke andar sirf ye pages)
+  const ALLOWED_PATHS_PWTHOR = [
     '/auth',
     '/study',
-    '/study/batches'
+    '/study/batches',
   ];
 
   let token = null;
   let verifyInterval = null;
-  let jsInjected = false;
 
-  // ==================== DOMAIN CHECK ====================
+  // ==================== LOADING SCREEN ====================
+  function showLoadingScreen() {
+    if (document.getElementById('pw-loading-screen')) return;
+
+    const loader = document.createElement('div');
+    loader.id = 'pw-loading-screen';
+    loader.style.cssText = `
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      z-index: 9999999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      transition: opacity 0.5s ease;
+    `;
+    loader.innerHTML = `
+      <style>
+        @keyframes pw-spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes pw-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        .pw-spinner {
+          width: 60px; height: 60px;
+          border: 4px solid rgba(255,255,255,0.1);
+          border-top: 4px solid #667eea;
+          border-radius: 50%;
+          animation: pw-spin 1s linear infinite;
+          margin-bottom: 24px;
+        }
+        .pw-loading-text {
+          color: rgba(255,255,255,0.9);
+          font-size: 16px;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          animation: pw-pulse 1.5s ease infinite;
+        }
+        .pw-brand {
+          color: white;
+          font-size: 28px;
+          font-weight: 800;
+          margin-bottom: 8px;
+          background: linear-gradient(135deg, #667eea, #764ba2);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        .pw-tagline {
+          color: rgba(255,255,255,0.4);
+          font-size: 12px;
+          margin-bottom: 40px;
+          letter-spacing: 1px;
+        }
+      </style>
+      <div class="pw-brand">PW Marco</div>
+      <div class="pw-tagline">SECURE ACCESS PORTAL</div>
+      <div class="pw-spinner"></div>
+      <div class="pw-loading-text">Verifying Access...</div>
+    `;
+    document.documentElement.appendChild(loader);
+  }
+
+  function hideLoadingScreen() {
+    const loader = document.getElementById('pw-loading-screen');
+    if (loader) {
+      loader.style.opacity = '0';
+      setTimeout(() => loader.remove(), 500);
+    }
+  }
+
+  // ==================== ALLOWED SITE CHECK ====================
   function isAllowedSite() {
     const host = window.location.hostname;
-    const pathName = window.location.pathname;
+    const path = window.location.pathname;
 
     if (host === 'homepage-pw-marco.netlify.app') return true;
     if (host === 'test.pwthor.live') return true;
 
     if (host === 'pwthor.live') {
-      return ALLOWED_PATHS_ON_PWTHOR.some(p => pathName === p || pathName.startsWith(p + '/'));
+      return ALLOWED_PATHS_PWTHOR.some(p => path === p || path.startsWith(p + '/'));
     }
 
     return false;
   }
 
-  // ==================== STORAGE ====================
+  // ==================== STORAGE (localStorage = across tabs/pages) ====================
   function getToken() {
-    try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
+    try {
+      return localStorage.getItem('pw_marco_token');
+    } catch (e) { return null; }
   }
+
   function setToken(t) {
-    try { localStorage.setItem(TOKEN_KEY, t); } catch (e) { }
+    try {
+      localStorage.setItem('pw_marco_token', t);
+      localStorage.setItem('pw_marco_token_time', Date.now().toString());
+    } catch (e) { }
   }
+
   function clearToken() {
-    try { localStorage.removeItem(TOKEN_KEY); } catch (e) { }
-  }
-
-  // ==================== LOADING OVERLAY ====================
-  function showLoadingOverlay() {
-    if (document.getElementById('pw-loading-overlay')) return;
-
-    const el = document.createElement('div');
-    el.id = 'pw-loading-overlay';
-    el.innerHTML = `
-      <style>
-        #pw-loading-overlay {
-          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-          background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-          z-index: 2147483647;
-          display: flex; align-items: center; justify-content: center; flex-direction: column;
-          transition: opacity 0.6s ease;
-        }
-        #pw-loading-overlay .pw-spinner {
-          width: 54px; height: 54px;
-          border: 4px solid rgba(255,255,255,0.15);
-          border-top: 4px solid #a78bfa;
-          border-radius: 50%;
-          animation: pw-spin 0.9s linear infinite;
-          margin-bottom: 22px;
-        }
-        #pw-loading-overlay .pw-load-title {
-          color: #e2d9f3; font-size: 18px; font-weight: 600;
-          font-family: 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.5px;
-        }
-        #pw-loading-overlay .pw-load-sub {
-          color: rgba(255,255,255,0.45); font-size: 13px; margin-top: 8px;
-          font-family: 'Segoe UI', system-ui, sans-serif;
-        }
-        @keyframes pw-spin { to { transform: rotate(360deg); } }
-      </style>
-      <div class="pw-spinner"></div>
-      <div class="pw-load-title">Loading Content…</div>
-      <div class="pw-load-sub">Please wait a moment</div>
-    `;
-
-    // Insert at very beginning of <html> so it appears before page content
-    const target = document.documentElement || document.body;
-    if (target) {
-      target.insertBefore(el, target.firstChild);
-    } else {
-      document.addEventListener('DOMContentLoaded', () => document.body.appendChild(el));
-    }
-  }
-
-  function hideLoadingOverlay() {
-    // Hide after 4.5 seconds — gives enough time for JS to inject
-    setTimeout(() => {
-      const el = document.getElementById('pw-loading-overlay');
-      if (el) {
-        el.style.opacity = '0';
-        setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 700);
-      }
-    }, 4500);
+    try {
+      localStorage.removeItem('pw_marco_token');
+      localStorage.removeItem('pw_marco_token_time');
+    } catch (e) { }
   }
 
   // ==================== POPUP BASE STYLES ====================
@@ -118,189 +142,230 @@
     const style = document.createElement('style');
     style.id = 'pw-popup-styles';
     style.textContent = `
-      .pw-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.85);
-        backdrop-filter: blur(12px) saturate(0.8);
-        -webkit-backdrop-filter: blur(12px) saturate(0.8);
-        z-index: 2147483646;
-        display: flex; align-items: center; justify-content: center;
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      @keyframes pw-fadeIn {
+        from { opacity: 0; transform: translate(-50%, -48%) scale(0.95); }
+        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
       }
-      .pw-card {
-        background: linear-gradient(160deg, #1e1b4b 0%, #14103a 100%);
-        border: 1px solid rgba(167, 139, 250, 0.25);
+      @keyframes pw-overlayIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes pw-shake {
+        0%, 100% { transform: translate(-50%, -50%) scale(1); }
+        25% { transform: translate(-52%, -50%) scale(1); }
+        75% { transform: translate(-48%, -50%) scale(1); }
+      }
+      .pw-popup-overlay {
+        position: fixed; top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85);
+        backdrop-filter: blur(8px);
+        z-index: 9999998;
+        animation: pw-overlayIn 0.3s ease;
+      }
+      .pw-popup-box {
+        position: fixed;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(145deg, #1a1a2e, #16213e);
+        border: 1px solid rgba(102, 126, 234, 0.3);
         border-radius: 20px;
-        padding: 44px 40px 36px;
-        max-width: 440px; width: 90%;
-        box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(167,139,250,0.1) inset;
-        text-align: center; color: #e2d9f3; position: relative;
-        animation: pw-card-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        padding: 40px 35px;
+        z-index: 9999999;
+        text-align: center;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        max-width: 440px;
+        width: 92%;
+        box-shadow: 0 25px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
+        animation: pw-fadeIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        color: white;
       }
-      @keyframes pw-card-in {
-        from { opacity: 0; transform: scale(0.88) translateY(24px); }
-        to   { opacity: 1; transform: scale(1) translateY(0); }
+      .pw-popup-icon {
+        font-size: 54px;
+        margin-bottom: 12px;
+        display: block;
       }
-      .pw-icon { font-size: 50px; margin-bottom: 14px; display: block; }
-      .pw-card h2 {
-        margin: 0 0 10px; font-size: 22px; font-weight: 700; color: #f0ebff;
-        letter-spacing: -0.3px;
+      .pw-popup-title {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 0 0 10px;
+        background: linear-gradient(135deg, #667eea, #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
-      .pw-card p {
-        color: rgba(220,210,255,0.65); font-size: 14px; line-height: 1.6; margin: 0 0 24px;
+      .pw-popup-desc {
+        color: rgba(255,255,255,0.6);
+        font-size: 13px;
+        line-height: 1.6;
+        margin: 0 0 24px;
       }
-      .pw-btn {
-        display: block; width: 100%; padding: 14px 20px;
-        background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-        color: white; border: none; border-radius: 12px;
-        font-size: 15px; font-weight: 600; cursor: pointer;
-        transition: transform 0.15s, box-shadow 0.15s;
-        box-shadow: 0 6px 24px rgba(124, 58, 237, 0.45);
-        letter-spacing: 0.2px; margin-top: 6px;
+      .pw-btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 14px 0;
+        border-radius: 12px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        width: 100%;
+        margin-bottom: 10px;
+        transition: all 0.3s;
+        letter-spacing: 0.5px;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
       }
-      .pw-btn:hover  { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(124,58,237,0.55); }
-      .pw-btn:active { transform: translateY(0); }
-      .pw-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
-      .pw-btn-ghost {
-        background: transparent;
-        border: 1px solid rgba(167,139,250,0.35);
-        color: rgba(220,210,255,0.7);
-        box-shadow: none; margin-top: 10px;
+      .pw-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(102, 126, 234, 0.6);
       }
-      .pw-btn-ghost:hover { background: rgba(167,139,250,0.08); box-shadow: none; }
-      .pw-status-msg {
-        color: #f87171; font-size: 13px; min-height: 20px; margin-top: 14px;
+      .pw-btn-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
       }
-      .pw-badge {
-        display: inline-block; padding: 4px 12px; border-radius: 20px;
-        font-size: 12px; font-weight: 600; text-transform: uppercase;
-        letter-spacing: 0.8px; margin-bottom: 18px;
+      .pw-btn-secondary {
+        background: rgba(255,255,255,0.05);
+        color: rgba(255,255,255,0.6);
+        border: 1px solid rgba(255,255,255,0.1);
+        padding: 12px 0;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+        transition: all 0.3s;
       }
-      .pw-badge-warn  { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
-      .pw-badge-error { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
-      .pw-badge-vpn   { background: rgba(234,88,12,0.15);  color: #fb923c; border: 1px solid rgba(234,88,12,0.3); }
-      .pw-divider { border: none; border-top: 1px solid rgba(167,139,250,0.12); margin: 20px 0 16px; }
-      .pw-footer { color: rgba(180,170,220,0.4); font-size: 11px; }
+      .pw-btn-secondary:hover {
+        background: rgba(255,255,255,0.1);
+        color: white;
+      }
+      .pw-status-text {
+        color: #f87171;
+        margin-top: 12px;
+        font-size: 13px;
+        min-height: 18px;
+      }
+      .pw-divider {
+        border: none;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        margin: 20px 0 16px;
+      }
+      .pw-footer-note {
+        color: rgba(255,255,255,0.3);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .pw-reason-badge {
+        display: inline-block;
+        background: rgba(248, 113, 113, 0.15);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+        color: #f87171;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        letter-spacing: 0.5px;
+      }
     `;
-    (document.head || document.documentElement).appendChild(style);
+    document.head.appendChild(style);
   }
 
   // ==================== KEY GENERATION POPUP ====================
-  function showKeyPopup() {
-    if (document.getElementById('pw-key-popup')) return;
+  function showKeyGenPopup() {
+    if (document.getElementById('pw-marco-popup')) return;
+
     injectPopupStyles();
 
-    const wrap = document.createElement('div');
-    wrap.id = 'pw-key-popup';
-    wrap.className = 'pw-overlay';
-    wrap.innerHTML = `
-      <div class="pw-card">
-        <span class="pw-icon">🔑</span>
-        <h2>Access Required</h2>
-        <p>Generate your free access key to continue. This is a one-time step — your key will be saved automatically.</p>
-        <button class="pw-btn" id="pw-gen-btn">Generate Access Key</button>
-        <div class="pw-status-msg" id="pw-gen-status"></div>
-        <hr class="pw-divider">
-        <div class="pw-footer">Your device will be registered &amp; verified securely</div>
-      </div>
+    const overlay = document.createElement('div');
+    overlay.className = 'pw-popup-overlay';
+    overlay.id = 'pw-overlay';
+
+    const popup = document.createElement('div');
+    popup.id = 'pw-marco-popup';
+    popup.className = 'pw-popup-box';
+    popup.innerHTML = `
+      <span class="pw-popup-icon">🔐</span>
+      <h2 class="pw-popup-title">Access Required</h2>
+      <p class="pw-popup-desc">
+        Generate your secure access key to unlock the app.<br>
+        Key will be valid across all authorized pages.
+      </p>
+      <button id="pw-gen-btn" class="pw-btn-primary">⚡ Generate Access Key</button>
+      <p id="pw-status" class="pw-status-text"></p>
+      <hr class="pw-divider">
+      <p class="pw-footer-note">🛡️ Your device will be registered &amp; verified in real-time.<br>VPN usage is not permitted.</p>
     `;
 
-    document.body.appendChild(wrap);
+    document.body.appendChild(overlay);
+    document.body.appendChild(popup);
     document.getElementById('pw-gen-btn').onclick = generateKey;
   }
 
-  // ==================== REVOKE / BAN / BLOCK POPUP ====================
-  function showBlockPopup(type, reason) {
-    removeExistingPopup();
+  // ==================== ALERT POPUP (Revoke / Ban / VPN) ====================
+  function showAlertPopup({ icon, title, reason, reasonLabel, showNewKeyBtn }) {
+    // Remove existing
+    removeAllPopups();
     injectPopupStyles();
 
-    const configs = {
-      access_revoked: {
-        icon: '🔒',
-        badge: '<span class="pw-badge pw-badge-warn">Access Revoked</span>',
-        title: 'Access Has Been Revoked',
-        message: reasonToMessage(reason),
-        showRegenBtn: true,
-      },
-      device_banned: {
-        icon: '🚫',
-        badge: '<span class="pw-badge pw-badge-error">Device Banned</span>',
-        title: 'Device Permanently Banned',
-        message: 'Your device has been banned by the administrator. This action is permanent.',
-        showRegenBtn: false,
-      },
-      vpn_detected: {
-        icon: '🛡️',
-        badge: '<span class="pw-badge pw-badge-vpn">VPN Detected</span>',
-        title: 'VPN / Proxy Detected',
-        message: 'A VPN or proxy connection was detected. Please disable it and try again to access the content.',
-        showRegenBtn: true,
-      },
-      token_expired: {
-        icon: '⏳',
-        badge: '<span class="pw-badge pw-badge-warn">Session Expired</span>',
-        title: 'Your Session Has Expired',
-        message: 'Your 24-hour access key has expired. Generate a new key to continue.',
-        showRegenBtn: true,
-      }
-    };
+    const overlay = document.createElement('div');
+    overlay.className = 'pw-popup-overlay';
+    overlay.id = 'pw-overlay';
 
-    const cfg = configs[type] || configs.access_revoked;
+    const popup = document.createElement('div');
+    popup.id = 'pw-marco-popup';
+    popup.className = 'pw-popup-box';
 
-    const wrap = document.createElement('div');
-    wrap.id = 'pw-key-popup';
-    wrap.className = 'pw-overlay';
-    wrap.innerHTML = `
-      <div class="pw-card">
-        ${cfg.badge}
-        <span class="pw-icon">${cfg.icon}</span>
-        <h2>${cfg.title}</h2>
-        <p>${cfg.message}</p>
-        ${cfg.showRegenBtn
-        ? `<button class="pw-btn" id="pw-regen-btn">🔄 Generate New Key</button>
-             <button class="pw-btn pw-btn-ghost" id="pw-close-btn">Dismiss</button>`
-        : ''
-      }
-      </div>
+    popup.innerHTML = `
+      <span class="pw-popup-icon">${icon}</span>
+      <h2 class="pw-popup-title">${title}</h2>
+      ${reasonLabel ? `<div class="pw-reason-badge">📋 ${reasonLabel}</div>` : ''}
+      <p class="pw-popup-desc">${reason}</p>
+      ${showNewKeyBtn ? `<button id="pw-newkey-btn" class="pw-btn-primary">🔄 Generate New Key</button>` : ''}
+      <hr class="pw-divider">
+      <p class="pw-footer-note">Contact admin if you think this is a mistake.</p>
     `;
 
-    document.body.appendChild(wrap);
+    document.body.appendChild(overlay);
+    document.body.appendChild(popup);
 
-    if (cfg.showRegenBtn) {
-      document.getElementById('pw-regen-btn').onclick = () => {
+    if (showNewKeyBtn) {
+      document.getElementById('pw-newkey-btn').onclick = () => {
+        removeAllPopups();
         clearToken();
-        // Go to homepage first, key popup will appear there
+        token = null;
+        // Redirect to homepage first, then key popup will show there
         window.location.href = 'https://homepage-pw-marco.netlify.app';
       };
-      const closeBtn = document.getElementById('pw-close-btn');
-      if (closeBtn) closeBtn.onclick = () => removeExistingPopup();
     }
   }
 
-  function reasonToMessage(reason) {
-    const msgs = {
-      admin_revoked:          'The administrator has manually revoked your access.',
-      policy_violation:       'Your access was revoked due to a policy violation.',
-      suspicious_activity:    'Suspicious activity was detected on your account.',
-      vpn_detected:           'Access was revoked because a VPN/proxy was detected.',
-      device_banned:          'Your device has been banned.',
-      network_issue:          'A network issue caused your access to be revoked.',
-      manual:                 'Access was manually revoked by the administrator.',
-    };
-    return msgs[reason] || 'Your access has been revoked. Generate a new key to continue.';
+  // ==================== VPN POPUP ====================
+  function showVPNPopup() {
+    showAlertPopup({
+      icon: '🚫',
+      title: 'VPN Detected',
+      reasonLabel: 'VPN / Proxy Blocked',
+      reason: 'VPN ya Proxy use karna allowed nahi hai.<br>Please VPN band karo aur dobara try karo.',
+      showNewKeyBtn: false
+    });
   }
 
-  function removeExistingPopup() {
-    const el = document.getElementById('pw-key-popup');
-    if (el && el.parentNode) el.parentNode.removeChild(el);
+  // ==================== REMOVE ALL POPUPS ====================
+  function removeAllPopups() {
+    ['pw-marco-popup', 'pw-overlay', 'pw-loading-screen'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
   }
 
   // ==================== GENERATE KEY ====================
   async function generateKey() {
     const btn = document.getElementById('pw-gen-btn');
-    const status = document.getElementById('pw-gen-status');
+    const status = document.getElementById('pw-status');
 
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Processing…'; }
+    btn.disabled = true;
+    btn.textContent = '⏳ Verifying...';
     if (status) status.textContent = '';
 
     try {
@@ -311,44 +376,45 @@
 
       const data = await response.json();
 
+      if (data.reason === 'vpn_detected') {
+        showVPNPopup();
+        return;
+      }
+
+      if (data.reason === 'device_banned') {
+        showAlertPopup({
+          icon: '🚫',
+          title: 'Device Banned',
+          reasonLabel: 'Permanent Ban',
+          reason: 'Tumhara device permanently ban kar diya gaya hai.',
+          showNewKeyBtn: false
+        });
+        return;
+      }
+
       if (response.ok && data.token) {
         token = data.token;
         setToken(token);
-
-        removeExistingPopup();
-
-        // Show loading overlay while JS injects
-        showLoadingOverlay();
-
+        removeAllPopups();
+        showLoadingScreen();
         startVerification();
         await injectMainJS();
-        hideLoadingOverlay();
-
+        setTimeout(hideLoadingScreen, 4000);
       } else {
-        const reason = data.reason || '';
-        if (reason === 'vpn_detected') {
-          removeExistingPopup();
-          showBlockPopup('vpn_detected', reason);
-          return;
-        }
-        if (reason === 'device_banned') {
-          removeExistingPopup();
-          showBlockPopup('device_banned', reason);
-          return;
-        }
-        if (status) status.textContent = `❌ ${data.error || 'Error generating key. Try again.'}`;
-        if (btn) { btn.disabled = false; btn.textContent = 'Generate Access Key'; }
+        if (status) status.textContent = `❌ ${data.error || 'Error generating key'}`;
+        btn.disabled = false;
+        btn.textContent = '⚡ Generate Access Key';
       }
 
     } catch (error) {
-      if (status) status.textContent = '❌ Network error. Please check your connection.';
-      if (btn) { btn.disabled = false; btn.textContent = 'Generate Access Key'; }
+      if (status) status.textContent = '❌ Network error. Try again.';
+      btn.disabled = false;
+      btn.textContent = '⚡ Generate Access Key';
     }
   }
 
   // ==================== INJECT MAIN.JS ====================
   async function injectMainJS() {
-    if (jsInjected) return;
     try {
       const response = await fetch(`${API}/api/get-main-js?token=${token}`);
       if (response.ok) {
@@ -357,10 +423,12 @@
         script.id = 'pw-main-script';
         script.textContent = code;
         document.body.appendChild(script);
-        jsInjected = true;
+        console.log('✅ main.js injected!');
+      } else {
+        console.error('❌ Failed to fetch main.js:', response.status);
       }
     } catch (error) {
-      console.error('[PW] Injection error:', error);
+      console.error('❌ Injection error:', error);
     }
   }
 
@@ -369,150 +437,138 @@
     if (verifyInterval) clearInterval(verifyInterval);
 
     verifyInterval = setInterval(async () => {
-      if (!token) { clearInterval(verifyInterval); return; }
       try {
-        const res = await fetch(`${API}/api/verify-token`, {
+        const response = await fetch(`${API}/api/verify-token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token })
         });
 
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          const reason = data.reason || 'access_revoked';
-          const revokeReason = data.revokeReason || reason;
-
-          clearInterval(verifyInterval);
-          clearToken();
-          token = null;
-
-          // Show appropriate block popup
-          if (reason === 'device_banned') {
-            showBlockPopup('device_banned', revokeReason);
-          } else if (reason === 'token_expired') {
-            showBlockPopup('token_expired', revokeReason);
-          } else {
-            showBlockPopup('access_revoked', revokeReason);
-          }
+        if (!response.ok) {
+          const data = await response.json();
+          handleTokenInvalid(data.reason, data.revokeReason || null);
         }
-      } catch (err) {
-        // Network errors — don't revoke, just skip this ping
+      } catch (error) {
+        // Network error - don't revoke, just skip
+        console.warn('⚠️ Verification network error');
       }
     }, 3000);
   }
 
+  // ==================== HANDLE INVALID TOKEN ====================
+  function handleTokenInvalid(reason, revokeReason) {
+    clearToken();
+    token = null;
+    clearInterval(verifyInterval);
+    verifyInterval = null;
+
+    // Remove any existing injected script
+    const sc = document.getElementById('pw-main-script');
+    if (sc) sc.remove();
+
+    const configs = {
+      device_banned: {
+        icon: '🚫',
+        title: 'Device Banned',
+        reasonLabel: 'Permanent Ban',
+        reason: 'Tumhara device admin ne permanently ban kar diya hai.<br>Kisi aur device se try karo.',
+        showNewKeyBtn: false
+      },
+      access_revoked: {
+        icon: '⛔',
+        title: 'Access Revoked',
+        reasonLabel: revokeReason || 'Admin ne Revoke kiya',
+        reason: `Tumhara access revoke ho gaya hai.<br><strong>Reason:</strong> ${revokeReason || 'Admin action'}.<br>Naya key generate karo ya admin se contact karo.`,
+        showNewKeyBtn: true
+      },
+      vpn_detected: {
+        icon: '🚫',
+        title: 'VPN Detected',
+        reasonLabel: 'VPN / Proxy Blocked',
+        reason: 'VPN detect hua. Please VPN band karo phir try karo.',
+        showNewKeyBtn: false
+      },
+      token_expired: {
+        icon: '⏰',
+        title: 'Key Expired',
+        reasonLabel: 'Session Expire',
+        reason: 'Tumhari access key expire ho gayi hai. Naya key generate karo.',
+        showNewKeyBtn: true
+      }
+    };
+
+    const config = configs[reason] || {
+      icon: '⚠️',
+      title: 'Access Blocked',
+      reasonLabel: reason || 'Unknown',
+      reason: 'Access block ho gaya. Naya key generate karo.',
+      showNewKeyBtn: true
+    };
+
+    showAlertPopup(config);
+  }
+
   // ==================== INIT ====================
-  function init() {
-    // Only run on allowed sites
+  function initLoader() {
+    // Agar allowed site nahi hai, kuch mat karo
     if (!isAllowedSite()) {
-      // Not an allowed site — don't inject or ask for key
+      console.log('🔕 Not an allowed site. Loader inactive.');
       return;
     }
 
-    const storedToken = getToken();
+    // Instant loading screen
+    showLoadingScreen();
 
-    if (storedToken) {
-      // Show loading overlay immediately — page redirect happened
-      showLoadingOverlay();
-      token = storedToken;
+    const existingToken = getToken();
 
-      // Verify the stored token is still valid before using it
+    if (existingToken) {
+      token = existingToken;
+
+      // Verify token first before showing content
       fetch(`${API}/api/verify-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: storedToken })
-      })
-        .then(res => res.json().then(data => ({ ok: res.ok, status: res.status, data })))
-        .then(({ ok, data }) => {
-          if (ok) {
-            // Token valid — inject JS
-            startVerification();
-            return injectMainJS().then(() => hideLoadingOverlay());
-          } else {
-            // Token invalid — show appropriate popup
-            const reason = data.reason || 'access_revoked';
-            const revokeReason = data.revokeReason || reason;
-            clearToken();
-            token = null;
-
-            // Hide overlay and show popup
-            const overlay = document.getElementById('pw-loading-overlay');
-            if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
-
-            if (reason === 'device_banned') {
-              showBlockPopup('device_banned', revokeReason);
-            } else if (reason === 'token_expired') {
-              showBlockPopup('token_expired', revokeReason);
-            } else {
-              showBlockPopup('access_revoked', revokeReason);
-            }
-          }
-        })
-        .catch(() => {
-          // Can't reach server — hide overlay, show stored content anyway
-          hideLoadingOverlay();
+        body: JSON.stringify({ token })
+      }).then(async (res) => {
+        if (res.ok) {
           startVerification();
-          injectMainJS();
-        });
-
-    } else {
-      // No token — show key generation popup
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', showKeyPopup);
-      } else {
-        showKeyPopup();
-      }
-    }
-  }
-
-  // Run immediately (before DOMContentLoaded) so overlay appears fast
-  if (document.readyState === 'loading') {
-    // Show overlay right away even before DOM
-    const earlyOverlay = document.createElement('div');
-    earlyOverlay.id = 'pw-loading-overlay';
-    earlyOverlay.style.cssText = [
-      'position:fixed', 'top:0', 'left:0', 'width:100%', 'height:100%',
-      'background:linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)',
-      'z-index:2147483647', 'display:flex', 'align-items:center',
-      'justify-content:center', 'flex-direction:column', 'transition:opacity 0.6s'
-    ].join(';');
-    earlyOverlay.innerHTML = `
-      <style>
-        @keyframes pw-spin2{to{transform:rotate(360deg)}}
-        #pw-loading-overlay .s{width:54px;height:54px;border:4px solid rgba(255,255,255,.15);
-          border-top:4px solid #a78bfa;border-radius:50%;animation:pw-spin2 .9s linear infinite;margin-bottom:22px;}
-        #pw-loading-overlay .t{color:#e2d9f3;font-size:18px;font-weight:600;
-          font-family:'Segoe UI',system-ui,sans-serif;}
-        #pw-loading-overlay .sub{color:rgba(255,255,255,.4);font-size:13px;margin-top:8px;
-          font-family:'Segoe UI',system-ui,sans-serif;}
-      </style>
-      <div class="s"></div>
-      <div class="t">Loading Content…</div>
-      <div class="sub">Please wait a moment</div>
-    `;
-
-    // If token exists, show overlay instantly while page loads
-    if (localStorage.getItem(TOKEN_KEY)) {
-      document.addEventListener('DOMContentLoaded', () => {
-        if (!document.getElementById('pw-loading-overlay')) {
-          document.body.insertBefore(earlyOverlay, document.body.firstChild);
+          await injectMainJS();
+          setTimeout(hideLoadingScreen, 4000);
+        } else {
+          const data = await res.json();
+          hideLoadingScreen();
+          handleTokenInvalid(data.reason, data.revokeReason);
         }
+      }).catch(() => {
+        // Network error on verify - show content anyway
+        startVerification();
+        injectMainJS().then(() => setTimeout(hideLoadingScreen, 4000));
       });
-    }
 
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+    } else {
+      // No token - show key gen popup
+      hideLoadingScreen();
+      showKeyGenPopup();
+    }
   }
 
-  // ── Tab visibility: resume/pause verification ──
+  // Start immediately
+  if (document.readyState === 'loading') {
+    // Show loading screen before DOM ready
+    document.addEventListener('DOMContentLoaded', initLoader);
+  } else {
+    initLoader();
+  }
+
+  // Page visibility change
   document.addEventListener('visibilitychange', () => {
-    if (!token) return;
-    if (document.hidden) {
-      clearInterval(verifyInterval);
-      verifyInterval = null;
-    } else {
+    if (!document.hidden && token) {
       if (!verifyInterval) startVerification();
+    } else {
+      if (verifyInterval) {
+        clearInterval(verifyInterval);
+        verifyInterval = null;
+      }
     }
   });
 
