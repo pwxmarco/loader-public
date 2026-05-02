@@ -1,149 +1,175 @@
 // ============================================
-// LOADER.JS - MEDIAN APP VERSION
+// LOADER.JS - MAIN LOADER
+// GitHub पर: loader-public repo में
 // ============================================
 
-(function() {
-  const SERVER_URL = 'https://js-injection-server.onrender.com'; // ← अपना URL डालो
-  let accessToken = null;
-  let verificationInterval = null;
+console.log('🚀 Main Loader Started');
 
-  console.log('🔍 Loader Started in Median App');
+(function() {
+  const API = 'https://js-injection-server.onrender.com'; // ← अपना URL डालो
+  let token = null;
+  let verifyInterval = null;
+
+  console.log('📍 API Server:', API);
 
   // ==================== STORAGE ====================
-  function getStoredToken() {
+  function getToken() {
     try {
-      return localStorage.getItem('pw_marco_token');
+      return sessionStorage.getItem('pw_marco_token');
     } catch(e) {
       return null;
     }
   }
 
-  function setStoredToken(token) {
+  function setToken(t) {
     try {
-      localStorage.setItem('pw_marco_token', token);
-    } catch(e) {
-      console.error('Storage error:', e);
-    }
-  }
-
-  function clearStoredToken() {
-    try {
-      localStorage.removeItem('pw_marco_token');
+      sessionStorage.setItem('pw_marco_token', t);
     } catch(e) {}
   }
 
-  // ==================== POPUP (Median-compatible) ====================
+  function clearToken() {
+    try {
+      sessionStorage.removeItem('pw_marco_token');
+    } catch(e) {}
+  }
+
+  // ==================== POPUP ====================
   function showPopup() {
+    // Check if popup already exists
     if (document.getElementById('pw-marco-popup')) return;
 
-    // Container बनाओ
-    const container = document.createElement('div');
-    container.id = 'pw-marco-popup';
-    container.style.cssText = `
+    console.log('📱 Showing popup...');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'pw-overlay';
+    overlay.style.cssText = `
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.6);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999999;
-      font-family: Arial, sans-serif;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 999998;
     `;
 
-    container.innerHTML = `
-      <div style="
-        background: white;
-        padding: 30px;
-        border-radius: 10px;
-        text-align: center;
-        max-width: 400px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-      ">
-        <h2 style="margin: 0 0 10px 0; color: #333;">🔑 Access Key Required</h2>
-        <p style="color: #666; margin: 0 0 20px 0; font-size: 14px;">Click to generate your access key</p>
-        
-        <button id="pw-gen-btn" style="
-          background: linear-gradient(135deg, #667eea, #764ba2);
-          color: white;
-          border: none;
-          padding: 12px 30px;
-          border-radius: 8px;
-          font-size: 16px;
-          cursor: pointer;
-          width: 100%;
-          font-weight: bold;
-        ">Generate Key</button>
-        
-        <p id="pw-msg" style="color: red; margin-top: 10px; font-size: 12px;"></p>
+    const popup = document.createElement('div');
+    popup.id = 'pw-marco-popup';
+    popup.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 40px;
+      border-radius: 15px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      z-index: 999999;
+      text-align: center;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      max-width: 500px;
+      width: 90%;
+    `;
+
+    popup.innerHTML = `
+      <div style="margin-bottom: 20px;">
+        <div style="font-size: 48px; margin-bottom: 10px;">🔑</div>
+        <h2 style="margin: 0; color: #333; font-size: 24px;">Generate Access Key</h2>
       </div>
+      
+      <p style="color: #666; margin: 15px 0; font-size: 14px; line-height: 1.5;">
+        Click the button below to authenticate and access the app
+      </p>
+      
+      <button id="pw-gen-btn" style="
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 14px 40px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        width: 100%;
+        transition: all 0.3s;
+      " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+        Generate Key
+      </button>
+      
+      <p id="pw-status" style="
+        color: #e74c3c;
+        margin-top: 15px;
+        font-size: 13px;
+        min-height: 20px;
+      "></p>
+      
+      <p style="
+        color: #999;
+        font-size: 12px;
+        margin-top: 20px;
+        border-top: 1px solid #eee;
+        padding-top: 15px;
+      ">
+        Your device will be registered and verified
+      </p>
     `;
 
-    document.body.appendChild(container);
-    document.getElementById('pw-gen-btn').onclick = generateAccessKey;
+    document.body.appendChild(overlay);
+    document.body.appendChild(popup);
+
+    document.getElementById('pw-gen-btn').onclick = generateKey;
   }
 
   // ==================== GENERATE KEY ====================
-  async function generateAccessKey() {
+  async function generateKey() {
     try {
       const btn = document.getElementById('pw-gen-btn');
-      const msg = document.getElementById('pw-msg');
-      
-      btn.disabled = true;
-      btn.textContent = '⏳ Generating...';
+      const status = document.getElementById('pw-status');
 
-      const response = await fetch(`${SERVER_URL}/api/generate-key`, {
+      btn.disabled = true;
+      btn.textContent = '⏳ Processing...';
+      status.textContent = '';
+
+      console.log('🔄 Generating key...');
+
+      const response = await fetch(`${API}/api/generate-key`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        accessToken = data.token;
-        setStoredToken(accessToken);
+      console.log('Response:', data);
 
+      if (response.ok && data.token) {
+        token = data.token;
+        setToken(token);
+        console.log('✅ Key generated successfully');
+
+        // Remove popup
         const popup = document.getElementById('pw-marco-popup');
+        const overlay = document.getElementById('pw-overlay');
         if (popup) popup.remove();
+        if (overlay) overlay.remove();
 
-        console.log('✅ Key generated');
+        // Start verification
         startVerification();
+        
+        // Inject main.js
         injectMainJS();
+
       } else {
-        msg.textContent = data.error || 'Error occurred';
+        console.error('❌ Error:', data.error);
+        status.textContent = `❌ ${data.error || 'Error generating key'}`;
         btn.disabled = false;
         btn.textContent = 'Generate Key';
       }
+
     } catch (error) {
-      console.error('Error:', error);
-      document.getElementById('pw-msg').textContent = 'Network error';
+      console.error('❌ Exception:', error);
+      document.getElementById('pw-status').textContent = '❌ Network error. Try again.';
       document.getElementById('pw-gen-btn').disabled = false;
       document.getElementById('pw-gen-btn').textContent = 'Generate Key';
     }
-  }
-
-  // ==================== VERIFICATION ====================
-  function startVerification() {
-    console.log('✅ Verification started');
-    
-    verificationInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`${SERVER_URL}/api/verify-token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: accessToken })
-        });
-
-        if (!response.ok) {
-          console.warn('⚠️ Token invalid');
-          handleTokenInvalid();
-        }
-      } catch (error) {
-        console.error('Verification error:', error);
-      }
-    }, 2500);
   }
 
   // ==================== INJECT MAIN.JS ====================
@@ -151,62 +177,114 @@
     try {
       console.log('📥 Fetching main.js...');
 
-      const response = await fetch(
-        `${SERVER_URL}/api/get-main-js?token=${accessToken}`
-      );
+      const response = await fetch(`${API}/api/get-main-js?token=${token}`);
 
       if (response.ok) {
         const code = await response.text();
-        console.log('✅ main.js received');
+        console.log('✅ main.js received:', code.length, 'bytes');
 
         const script = document.createElement('script');
+        script.id = 'pw-main-script';
         script.textContent = code;
         document.body.appendChild(script);
 
-        console.log('✅ main.js injected');
+        console.log('✅ main.js injected successfully!');
+      } else {
+        console.error('❌ Failed to fetch main.js:', response.status);
       }
     } catch (error) {
-      console.error('Injection error:', error);
+      console.error('❌ Injection error:', error);
     }
   }
 
-  // ==================== HANDLE INVALID ====================
-  function handleTokenInvalid() {
-    clearStoredToken();
-    accessToken = null;
-    clearInterval(verificationInterval);
-    
-    alert('Access revoked. Reload page to generate new key.');
-    location.reload();
+  // ==================== VERIFICATION ====================
+  function startVerification() {
+    console.log('🔍 Starting verification (every 3 seconds)');
+
+    verifyInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${API}/api/verify-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          console.warn('⚠️ Token invalid:', data.reason);
+          handleTokenInvalid(data.reason);
+        } else {
+          console.log('✅ Token valid');
+        }
+      } catch (error) {
+        console.error('❌ Verification error:', error);
+      }
+    }, 3000);
   }
 
-  // ==================== INIT ====================
-  function init() {
-    console.log('🚀 Initializing...');
+  // ==================== HANDLE INVALID TOKEN ====================
+  function handleTokenInvalid(reason) {
+    console.log('🔴 Token invalid. Reason:', reason);
     
-    const token = getStoredToken();
-    if (token) {
-      console.log('✅ Token found');
-      accessToken = token;
+    clearToken();
+    token = null;
+    clearInterval(verifyInterval);
+
+    let message = 'Your access has been revoked';
+    
+    if (reason === 'device_banned') {
+      message = '🚫 Your device has been banned';
+    } else if (reason === 'access_revoked') {
+      message = '🚫 Your access has been revoked by admin';
+    }
+
+    alert(`${message}\n\nRedirecting...`);
+    
+    // Redirect to homepage
+    window.location.href = 'https://homepage-pw-marco.netlify.app';
+  }
+
+  // ==================== ON PAGE LOAD ====================
+  function initLoader() {
+    console.log('📄 Initializing loader...');
+
+    const existingToken = getToken();
+
+    if (existingToken) {
+      console.log('✅ Token found in storage');
+      token = existingToken;
       startVerification();
       injectMainJS();
     } else {
-      console.log('❌ No token, showing popup');
+      console.log('❌ No token found, showing popup');
       showPopup();
     }
   }
 
-  // Page load पर init करो
+  // Start when document is ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', initLoader);
   } else {
-    init();
+    initLoader();
   }
 
-  // Cleanup on page unload
+  // ==================== ON PAGE UNLOAD ====================
   window.addEventListener('beforeunload', () => {
-    clearStoredToken();
-    clearInterval(verificationInterval);
+    clearToken();
+    clearInterval(verifyInterval);
+  });
+
+  // ==================== ON TAB VISIBILITY CHANGE ====================
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      console.log('📵 Page hidden');
+      clearInterval(verifyInterval);
+    } else {
+      console.log('📱 Page visible again');
+      if (token && !verifyInterval) {
+        startVerification();
+      }
+    }
   });
 
 })();
