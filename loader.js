@@ -1,5 +1,5 @@
 // ============================================
-// LOADER.JS - GLOBAL TOKEN WITH HOMEPAGE REDIRECT
+// LOADER.JS - COMPLETE & FINAL
 // ============================================
 
 console.log('🚀 Main Loader Started');
@@ -9,8 +9,9 @@ console.log('🚀 Main Loader Started');
   const HOMEPAGE = 'https://homepage-pw-marco.netlify.app';
   let token = null;
   let verifyInterval = null;
+  let isGenerating = false;
 
-  console.log('📍 API Server:', API);
+  console.log('📍 API:', API);
   console.log('📍 Homepage:', HOMEPAGE);
 
   // ==================== STORAGE ====================
@@ -36,8 +37,6 @@ console.log('🚀 Main Loader Started');
 
   // ==================== LOADING SCREEN ====================
   function showLoadingScreen() {
-    console.log('⏳ Showing loading screen...');
-
     const existing = document.getElementById('pw-loading-screen');
     if (existing) existing.remove();
 
@@ -58,25 +57,11 @@ console.log('🚀 Main Loader Started');
     `;
 
     loader.innerHTML = `
-      <div style="
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
-        color: white;
-      ">
-        <div style="
-          width: 60px;
-          height: 60px;
-          border: 5px solid rgba(255,255,255,0.3);
-          border-top: 5px solid white;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        "></div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; color: white;">
+        <div style="width: 60px; height: 60px; border: 5px solid rgba(255,255,255,0.3); border-top: 5px solid white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
         <h2 style="margin: 0; font-size: 20px;">Loading...</h2>
         <p style="margin: 0; font-size: 14px; opacity: 0.8;">Please wait</p>
       </div>
-
       <style>
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -91,7 +76,7 @@ console.log('🚀 Main Loader Started');
   function hideLoadingScreen() {
     const loader = document.getElementById('pw-loading-screen');
     if (loader) {
-      loader.style.transition = 'opacity 0.5s ease-out';
+      loader.style.transition = 'opacity 0.5s';
       loader.style.opacity = '0';
       setTimeout(() => {
         if (loader.parentNode) loader.remove();
@@ -152,9 +137,9 @@ console.log('🚀 Main Loader Started');
           cursor: pointer;
           margin: 12px 6px;
           font-weight: 600;
-          transition: all 0.3s ease;
+          transition: all 0.3s;
           box-shadow: 0 5px 15px ${btn.color ? btn.color + '40' : '#667eea40'};
-        " onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 20px ${btn.color ? btn.color + '60' : '#667eea60'}';" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 5px 15px ${btn.color ? btn.color + '40' : '#667eea40'}';">
+        ">
           ${btn.text}
         </button>
       `;
@@ -173,29 +158,18 @@ console.log('🚀 Main Loader Started');
           }
         }
       </style>
-
-      <div style="font-size: 56px; margin-bottom: 20px; animation: bounce 0.6s ease-in-out;">
+      <div style="font-size: 56px; margin-bottom: 20px; animation: bounce 0.6s;">
         ${isDanger ? '🚫' : '🔑'}
       </div>
-
-      <h2 style="
-        margin: 0 0 15px 0;
-        color: ${isDanger ? '#e74c3c' : '#333'};
-        font-size: 24px;
-        font-weight: 700;
-      ">${title}</h2>
-
-      <p style="
-        color: #555;
-        margin: 15px 0 25px 0;
-        font-size: 15px;
-        line-height: 1.7;
-      ">${message}</p>
-
+      <h2 style="margin: 0 0 15px 0; color: ${isDanger ? '#e74c3c' : '#333'}; font-size: 24px; font-weight: 700;">
+        ${title}
+      </h2>
+      <p style="color: #555; margin: 15px 0 25px 0; font-size: 15px; line-height: 1.7;">
+        ${message}
+      </p>
       <div style="margin-top: 30px;">
         ${buttonsHTML}
       </div>
-
       <style>
         @keyframes bounce {
           0%, 100% { transform: scale(1); }
@@ -210,6 +184,12 @@ console.log('🚀 Main Loader Started');
     buttons.forEach((btn, idx) => {
       const btnEl = document.getElementById(`pw-btn-${idx}`);
       if (btnEl) {
+        btnEl.onmouseover = function() {
+          this.style.transform = 'translateY(-3px)';
+        };
+        btnEl.onmouseout = function() {
+          this.style.transform = 'translateY(0)';
+        };
         btnEl.onclick = () => {
           if (overlay.parentNode) overlay.remove();
           if (popup.parentNode) popup.remove();
@@ -219,13 +199,14 @@ console.log('🚀 Main Loader Started');
     });
   }
 
-  // ==================== SHOW GENERATE KEY POPUP ====================
+  // ==================== GENERATE KEY POPUP ====================
   function showGenerateKeyPopup() {
-    console.log('📱 Showing generate key popup...');
+    console.log('📱 Showing generate key popup');
+    isGenerating = false;
 
     showPopup(
       '🔑 Generate Access Key',
-      'Click the button below to authenticate and access the app securely.',
+      'Click the button to authenticate and access the app.',
       [
         {
           text: '✨ Generate Key',
@@ -239,28 +220,40 @@ console.log('🚀 Main Loader Started');
 
   // ==================== GENERATE KEY ====================
   async function generateKey() {
+    if (isGenerating) {
+      console.log('⚠️ Already generating...');
+      return;
+    }
+
+    isGenerating = true;
+
     try {
+      console.log('🔄 Starting key generation...');
+
       const btn = document.getElementById('pw-btn-0');
-      if (!btn) return;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Processing...';
+      }
 
-      btn.disabled = true;
-      btn.textContent = '⏳ Processing...';
-      btn.style.background = '#95a5a6';
-      btn.style.cursor = 'not-allowed';
-
-      console.log('🔄 Generating key...');
+      console.log('📤 Sending request to:', `${API}/api/generate-key`);
 
       const response = await fetch(`${API}/api/generate-key`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
       });
 
-      const data = await response.json();
+      console.log('📥 Response Status:', response.status);
 
-      console.log('Response Status:', response.status);
+      const data = await response.json();
+      console.log('📥 Response Data:', data);
 
       if (response.status === 403) {
-        // VPN या Ban
+        console.log('❌ Access Denied');
+
         const overlay = document.getElementById('pw-overlay');
         const popup = document.getElementById('pw-popup');
         if (overlay) overlay.remove();
@@ -269,59 +262,58 @@ console.log('🚀 Main Loader Started');
         showPopup(
           data.error || '🚫 Access Denied',
           data.message || 'Your access has been denied.',
-          [
-            {
-              text: 'OK',
-              color: '#e74c3c',
-              onclick: () => {}
-            }
-          ],
+          [{ text: 'OK', color: '#e74c3c', onclick: () => {} }],
           true
         );
-      } else if (response.ok && data.token) {
+
+        isGenerating = false;
+
+      } else if (response.ok && data.success && data.token) {
+        console.log('✅ Key generated successfully');
         token = data.token;
         setToken(token);
-        console.log('✅ Key generated successfully');
 
-        // Close popup
         const overlay = document.getElementById('pw-overlay');
         const popup = document.getElementById('pw-popup');
         if (overlay && overlay.parentNode) overlay.remove();
         if (popup && popup.parentNode) popup.remove();
 
-        // Show loading
+        console.log('⏳ Showing loading screen');
         showLoadingScreen();
 
-        // Redirect to homepage
-        console.log('🏠 Redirecting to homepage...');
         setTimeout(() => {
+          console.log('🏠 Redirecting to homepage');
           window.location.href = HOMEPAGE;
         }, 1500);
 
       } else {
-        console.error('❌ Error:', data.error);
-        btn.disabled = false;
-        btn.textContent = '✨ Generate Key';
-        btn.style.background = '#667eea';
-        btn.style.cursor = 'pointer';
+        console.error('❌ Error:', data);
+
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '✨ Generate Key';
+        }
+
+        isGenerating = false;
       }
 
     } catch (error) {
       console.error('❌ Exception:', error);
+
       const btn = document.getElementById('pw-btn-0');
       if (btn) {
         btn.disabled = false;
         btn.textContent = '✨ Generate Key';
-        btn.style.background = '#667eea';
-        btn.style.cursor = 'pointer';
       }
+
+      isGenerating = false;
     }
   }
 
   // ==================== INJECT MAIN.JS ====================
   async function injectMainJS() {
     try {
-      console.log('📥 Fetching main.js...');
+      console.log('📥 Fetching main.js');
 
       const response = await fetch(`${API}/api/get-main-js?token=${token}`);
 
@@ -335,8 +327,6 @@ console.log('🚀 Main Loader Started');
         document.body.appendChild(script);
 
         console.log('✅ main.js injected!');
-      } else {
-        console.error('❌ Failed to fetch main.js:', response.status);
       }
     } catch (error) {
       console.error('❌ Injection error:', error);
@@ -345,7 +335,7 @@ console.log('🚀 Main Loader Started');
 
   // ==================== VERIFICATION ====================
   function startVerification() {
-    console.log('🔍 Verification started (every 3 seconds)');
+    console.log('🔍 Verification started');
 
     verifyInterval = setInterval(async () => {
       try {
@@ -357,8 +347,8 @@ console.log('🚀 Main Loader Started');
 
         if (!response.ok) {
           const data = await response.json();
-          console.warn('⚠️ Token invalid:', data.reason);
-          handleTokenInvalid(data.reason || 'unknown');
+          console.warn('⚠️ Token invalid');
+          handleTokenInvalid(data.reason);
         }
       } catch (error) {
         console.error('❌ Verification error:', error);
@@ -368,25 +358,19 @@ console.log('🚀 Main Loader Started');
 
   // ==================== HANDLE INVALID TOKEN ====================
   function handleTokenInvalid(reason) {
-    console.log('🔴 Token invalid. Reason:', reason);
-
     clearToken();
     token = null;
     clearInterval(verifyInterval);
 
     let title = '🚫 Access Denied';
     let message = 'Your access has been revoked.';
-    let isDanger = true;
 
     if (reason === 'device_banned') {
       title = '🚫 Device Banned';
-      message = 'Your device has been banned by the administrator.\n\nPlease contact support for assistance.';
+      message = 'Your device has been banned by administrator.';
     } else if (reason === 'access_revoked') {
       title = '🚫 Access Revoked';
-      message = 'Your access has been revoked by the administrator.\n\nPlease generate a new key to continue.';
-    } else if (reason === 'vpn_detected') {
-      title = '⚠️ VPN Detected';
-      message = 'We detected you are using a VPN or proxy.\n\nPlease disable it to continue using the app.';
+      message = 'Your access has been revoked by administrator.';
     }
 
     showPopup(
@@ -398,26 +382,21 @@ console.log('🚀 Main Loader Started');
           color: '#667eea',
           onclick: () => {
             window.location.href = HOMEPAGE;
-            setTimeout(() => {
-              showGenerateKeyPopup();
-            }, 2000);
           }
         }
       ],
-      isDanger
+      true
     );
   }
 
   // ==================== ON PAGE LOAD ====================
   function initLoader() {
-    console.log('📄 Initializing loader...');
-    console.log('   Hostname:', window.location.hostname);
-    console.log('   Pathname:', window.location.pathname);
+    console.log('📄 Initializing...');
 
     const existingToken = getToken();
 
     if (existingToken) {
-      console.log('✅ Token found (global)');
+      console.log('✅ Token found');
       token = existingToken;
 
       showLoadingScreen();
@@ -428,14 +407,13 @@ console.log('🚀 Main Loader Started');
         hideLoadingScreen();
       }, 1500);
     } else {
-      console.log('❌ No token found');
+      console.log('❌ No token');
 
-      // Check if already on homepage
       if (window.location.hostname.includes('homepage-pw-marco.netlify.app')) {
-        console.log('📍 On homepage - showing popup');
+        console.log('📍 On homepage');
         showGenerateKeyPopup();
       } else {
-        console.log('📍 Not on homepage - redirecting');
+        console.log('📍 Redirecting to homepage');
         showLoadingScreen();
         setTimeout(() => {
           window.location.href = HOMEPAGE;
@@ -444,14 +422,12 @@ console.log('🚀 Main Loader Started');
     }
   }
 
-  // Start when document is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initLoader);
   } else {
     setTimeout(initLoader, 100);
   }
 
-  // ==================== ON PAGE UNLOAD ====================
   window.addEventListener('beforeunload', () => {
     clearInterval(verifyInterval);
   });
