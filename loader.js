@@ -1,12 +1,16 @@
 // ============================================
-// LOADER.JS - WORKING VERSION
+// LOADER.JS - MAIN LOADER
 // ============================================
 
+console.log('🚀 Loader.js started');
+
 (function() {
-  const API = 'https://js-injection-server.onrender.com'; // ← अपना URL
+  const API = 'https://js-injection-server.onrender.com'; // ← बदलो यहाँ
   const HOMEPAGE = 'https://homepage-pw-marco.netlify.app';
   let token = null;
   let verifyInterval = null;
+
+  console.log('API:', API);
 
   function getToken() {
     try {
@@ -150,9 +154,9 @@
 
   function showGenerateKeyPopup() {
     showPopup(
-      '🔑 Generate Access Key',
+      '🔑 Generate Key',
       'Click to authenticate',
-      [{ text: 'Generate Key', color: '#667eea', onclick: generateKey }]
+      [{ text: 'Generate', color: '#667eea', onclick: generateKey }]
     );
   }
 
@@ -161,8 +165,10 @@
       const btn = document.getElementById('pw-btn-0');
       if (btn) {
         btn.disabled = true;
-        btn.textContent = 'Processing...';
+        btn.textContent = 'Generating...';
       }
+
+      console.log('POST', API + '/api/generate-key');
 
       const response = await fetch(`${API}/api/generate-key`, {
         method: 'POST',
@@ -170,7 +176,10 @@
         body: JSON.stringify({})
       });
 
+      console.log('Response status:', response.status);
+
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (response.status === 403) {
         const overlay = document.getElementById('pw-overlay');
@@ -181,6 +190,7 @@
         showPopup(data.error, data.message, [{ text: 'OK', color: '#e74c3c' }], true);
 
       } else if (response.ok && data.token) {
+        console.log('✅ Key generated');
         token = data.token;
         setToken(token);
 
@@ -200,7 +210,7 @@
       } else {
         if (btn) {
           btn.disabled = false;
-          btn.textContent = 'Generate Key';
+          btn.textContent = 'Generate';
         }
       }
 
@@ -209,17 +219,20 @@
       const btn = document.getElementById('pw-btn-0');
       if (btn) {
         btn.disabled = false;
-        btn.textContent = 'Generate Key';
+        btn.textContent = 'Generate';
       }
     }
   }
 
   async function injectMainJS() {
     try {
+      console.log('Fetching main.js');
+
       const response = await fetch(`${API}/api/get-main-js?token=${token}`);
 
       if (response.ok) {
         const code = await response.text();
+        console.log('main.js received:', code.length, 'bytes');
 
         const script = document.createElement('script');
         script.id = 'pw-main-script';
@@ -277,6 +290,7 @@
     const existingToken = getToken();
 
     if (existingToken) {
+      console.log('Token found');
       token = existingToken;
 
       showLoadingScreen();
@@ -287,6 +301,8 @@
         hideLoadingScreen();
       }, 1500);
     } else {
+      console.log('No token');
+
       if (window.location.hostname.includes('homepage-pw-marco.netlify.app')) {
         showGenerateKeyPopup();
       } else {
